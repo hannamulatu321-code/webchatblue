@@ -1,27 +1,40 @@
 import fs from 'fs';
 import path from 'path';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+// Use /tmp for serverless environments (like Vercel), otherwise use project data directory
+const DATA_DIR = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME
+  ? '/tmp/data'
+  : path.join(process.cwd(), 'data');
 
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const CONTACTS_FILE = path.join(DATA_DIR, 'contacts.json');
 const MESSAGES_FILE = path.join(DATA_DIR, 'messages.json');
 
-// Initialize files if they don't exist
-function ensureFile(filePath: string, defaultValue: any) {
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, JSON.stringify(defaultValue, null, 2));
+// Lazy initialization - ensure directory and files exist only when needed
+function ensureDataDirectory(): void {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+  } catch (error) {
+    // In serverless environments, directory might already exist or creation might fail
+    // This is okay - we'll handle file operations gracefully
+    console.warn('Could not create data directory:', error);
   }
 }
 
-ensureFile(USERS_FILE, []);
-ensureFile(CONTACTS_FILE, {});
-ensureFile(MESSAGES_FILE, []);
+// Initialize files if they don't exist (lazy - called when needed)
+function ensureFile(filePath: string, defaultValue: any): void {
+  try {
+    ensureDataDirectory();
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, JSON.stringify(defaultValue, null, 2));
+    }
+  } catch (error) {
+    // In read-only filesystems, we'll work with in-memory data
+    console.warn('Could not initialize file:', filePath, error);
+  }
+}
 
 // User types
 export interface User {
@@ -54,6 +67,7 @@ export interface Message {
 // User operations
 export function getUsers(): User[] {
   try {
+    ensureFile(USERS_FILE, []);
     if (!fs.existsSync(USERS_FILE)) {
       return [];
     }
@@ -88,7 +102,13 @@ export function createUser(user: Omit<User, 'id' | 'createdAt'>): User {
     profilePicture: user.profilePicture || '',
   };
   users.push(newUser);
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+  try {
+    ensureDataDirectory();
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+  } catch (error) {
+    console.error('Error writing users file:', error);
+    // Continue anyway - data is in memory for this request
+  }
   return newUser;
 }
 
@@ -106,15 +126,33 @@ export function updateUser(userId: string, updates: Partial<Omit<User, 'id' | 'p
     updatedAt: new Date().toISOString(),
   };
   
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+  try {
+    ensureDataDirectory();
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+  } catch (error) {
+    console.error('Error writing users file:', error);
+    // Continue anyway - data is in memory for this request
+  }
   console.log('User updated in database. Profile picture:', users[userIndex].profilePicture?.substring(0, 50) + '...');
   return users[userIndex];
 }
 
 // Contact operations
 export function getContacts(): Record<string, Contact[]> {
-  const data = fs.readFileSync(CONTACTS_FILE, 'utf-8');
-  return JSON.parse(data);
+  try {
+    ensureFile(CONTACTS_FILE, {});
+    if (!fs.existsSync(CONTACTS_FILE)) {
+      return {};
+    }
+    const data = fs.readFileSync(CONTACTS_FILE, 'utf-8');
+    if (!data || data.trim() === '') {
+      return {};
+    }
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error reading contacts file:', error);
+    return {};
+  }
 }
 
 export function getUserContacts(userId: string): Contact[] {
@@ -135,14 +173,32 @@ export function addContact(userId: string, contactId: string): void {
       contactId,
       addedAt: new Date().toISOString(),
     });
-    fs.writeFileSync(CONTACTS_FILE, JSON.stringify(contacts, null, 2));
+    try {
+      ensureDataDirectory();
+      fs.writeFileSync(CONTACTS_FILE, JSON.stringify(contacts, null, 2));
+    } catch (error) {
+      console.error('Error writing contacts file:', error);
+      // Continue anyway - data is in memory for this request
+    }
   }
 }
 
 // Message operations
 export function getMessages(): Message[] {
-  const data = fs.readFileSync(MESSAGES_FILE, 'utf-8');
-  return JSON.parse(data);
+  try {
+    ensureFile(MESSAGES_FILE, []);
+    if (!fs.existsSync(MESSAGES_FILE)) {
+      return [];
+    }
+    const data = fs.readFileSync(MESSAGES_FILE, 'utf-8');
+    if (!data || data.trim() === '') {
+      return [];
+    }
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error reading messages file:', error);
+    return [];
+  }
 }
 
 export function getConversationMessages(userId1: string, userId2: string): Message[] {
@@ -163,7 +219,13 @@ export function createMessage(message: Omit<Message, 'id' | 'timestamp' | 'read'
     read: false,
   };
   messages.push(newMessage);
-  fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messages, null, 2));
+  try {
+    ensureDataDirectory();
+    fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messages, null, 2));
+  } catch (error) {
+    console.error('Error writing messages file:', error);
+    // Continue anyway - data is in memory for this request
+  }
   return newMessage;
 }
 
@@ -175,6 +237,12 @@ export function markMessagesAsRead(userId: string, otherUserId: string): void {
     }
     return m;
   });
-  fs.writeFileSync(MESSAGES_FILE, JSON.stringify(updated, null, 2));
+  try {
+    ensureDataDirectory();
+    fs.writeFileSync(MESSAGES_FILE, JSON.stringify(updated, null, 2));
+  } catch (error) {
+    console.error('Error writing messages file:', error);
+    // Continue anyway - data is in memory for this request
+  }
 }
 
