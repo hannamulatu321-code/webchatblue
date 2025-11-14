@@ -34,7 +34,7 @@ interface User {
 }
 
 export default function ChatInterface() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -55,6 +55,7 @@ export default function ChatInterface() {
   const [viewProfileUserId, setViewProfileUserId] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'messages' | 'contacts'>('messages');
+  const [mounted, setMounted] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
   const chatAreaRef = useRef<HTMLDivElement>(null);
@@ -62,12 +63,17 @@ export default function ChatInterface() {
   const statusIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Redirect if not authenticated
+  // Track client-side mount to prevent hydration mismatch
   useEffect(() => {
-    if (!session) {
+    setMounted(true);
+  }, []);
+
+  // Redirect if not authenticated (only after mount to prevent hydration issues)
+  useEffect(() => {
+    if (mounted && status === 'unauthenticated') {
       router.push('/auth/signin');
     }
-  }, [session, router]);
+  }, [mounted, status, router]);
 
   // Fetch contacts
   const fetchContacts = async () => {
@@ -415,6 +421,19 @@ export default function ChatInterface() {
     return groups;
   };
 
+  // Show loading state during initial load or if session is loading
+  if (!mounted || status === 'loading') {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-700 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Redirect if not authenticated (handled by useEffect, but also return null here)
   if (!session) {
     return null;
   }

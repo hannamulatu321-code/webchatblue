@@ -86,6 +86,7 @@ export const authOptions = {
   },
   secret: process.env.NEXTAUTH_SECRET || 'fallback-secret-key-change-in-production',
   debug: process.env.NODE_ENV === 'development',
+  trustHost: true, // Trust all hosts (for development and localhost)
 };
 
 const handler = NextAuth(authOptions);
