@@ -421,8 +421,21 @@ export default function ChatInterface() {
     return groups;
   };
 
-  // Show loading state during initial load or if session is loading
-  if (!mounted || status === 'loading') {
+  // Always show loading state until mounted to prevent hydration mismatch
+  // This ensures server and client render the same initial content
+  if (!mounted) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-100" suppressHydrationWarning>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-700 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state if session is still loading
+  if (status === 'loading') {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-100">
         <div className="text-center">
