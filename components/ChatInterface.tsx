@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import ProfileModal from './ProfileModal';
 import ViewProfileModal from './ViewProfileModal';
 
+
 interface Contact {
   id: string;
   name: string;

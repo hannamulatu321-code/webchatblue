@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { getUserContacts, getUserById, addContact, getUserByPhone, createUser } from '@/lib/data-storage';
+import { getUserContacts, getUserById, addContact, getUserByPhone, createUser, User } from '@/lib/data-storage';
 
 export async function GET(request: NextRequest) {
   try {
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { contactId, phone, name } = body;
 
-    let contactUser;
+    let contactUser: User | undefined;
 
     // Handle adding by contactId (existing functionality)
     if (contactId) {
@@ -105,8 +105,11 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // At this point, contactUser is guaranteed to be defined
+      const user = contactUser;
+
       // Check if trying to add self
-      if (contactUser.id === session.user.id) {
+      if (user.id === session.user.id) {
         return NextResponse.json(
           { error: 'Cannot add yourself as a contact' },
           { status: 400 }
@@ -115,7 +118,7 @@ export async function POST(request: NextRequest) {
 
       // Check if contact already exists
       const existingContacts = getUserContacts(session.user.id);
-      const alreadyAdded = existingContacts.some(c => c.contactId === contactUser.id);
+      const alreadyAdded = existingContacts.some(c => c.contactId === user.id);
       
       if (alreadyAdded) {
         return NextResponse.json(
@@ -125,10 +128,10 @@ export async function POST(request: NextRequest) {
       }
 
       // Add contact
-      addContact(session.user.id, contactUser.id);
+      addContact(session.user.id, user.id);
 
       // Return contact info without password
-      const { password: _, ...contactWithoutPassword } = contactUser;
+      const { password: _, ...contactWithoutPassword } = user;
       return NextResponse.json({ 
         success: true, 
         contact: contactWithoutPassword 
